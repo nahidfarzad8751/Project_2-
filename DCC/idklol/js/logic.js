@@ -74,25 +74,47 @@ info.update = function (props) {
 info.addTo(map);
 
 // get color depending on population density value
-function getColorHealth(d) {
-  //console.log(typeof d3.max(d, (dd) => +dd.value()));
-  return d > 1.3
-    ? "#4a8ccf"
-    : d > 1.1
-    ? "#4a8ccf"
-    : d > 0.9
-    ? "#E31A1C"
-    : d > 0.7
-    ? "#FC4E2A"
-    : d > 0.5
-    ? "#FD8D3C"
-    : d > 0.3
-    ? "#FEB24C"
-    : d > 0.1
-    ? "#FED976"
-    : "#000000";
+function getColorOpacityHealth(d) {
+  return d < 0.001 ? 1 : 1; //condition ? exprIfTrue : exprIfFalse
 }
 
+//https://stackoverflow.com/questions/22949597/getting-max-values-in-json-array
+function getMaxMin(arr, prop) {
+  var max;
+  var min;
+  ////console.log(arr);
+  console.log(arr.length);
+  for (var i = 0; i < arr.length - 1; i++) {
+    if (max == null || parseInt(arr[i].properties[prop]) > parseInt(max))
+      max = arr[i].properties[prop];
+    max_dict = arr[i].properties;
+    if (min == null || parseInt(arr[i].properties[prop]) < parseInt(min))
+      min = arr[i].properties[prop];
+    min_dict = arr[i].properties;
+  }
+
+  console.log(`$The max Value for the ${prop} feature is: {$max}`);
+  console.log(`$The max Object for the ${prop} feature is: `, max_dict);
+
+  console.log(`$The min Value for the ${prop} feature is: ${min}`);
+  console.log(`$The min Object for the ${prop} feature is: `, min_dict);
+
+  return [min, max];
+}
+var [Min, Max] = getMaxMin(statesData.features, "Health");
+
+console.log(Min, Max);
+// https://gka.github.io/chroma.js/
+// Can now create a more useful and relavent scale for coloring that is relative to the desired feature size
+
+function getColorofFeature(d) {
+  scale = chroma
+    .scale(["red", "blue", "green"])
+    .domain([Min, Max], 10, "quantiles");
+  console.log(d);
+  return d == null ? chroma("black").darken().hex() : scale(d).hex();
+  //condition ? exprIfTrue : exprIfFalse
+}
 //Overall border and color styling
 function style(feature) {
   //console.log(feature);
@@ -100,9 +122,9 @@ function style(feature) {
     weight: 2,
     opacity: 1,
     color: "white", //border color
-    dashArray: "3",
-    fillOpacity: 0.7,
-    fillColor: getColorHealth(feature.properties.Health),
+    dashArray: "4",
+    fillOpacity: getColorOpacityHealth(feature.properties.Health), // 0.7,
+    fillColor: getColorofFeature(feature.properties.Health),
   };
   console.log(feature);
 }
@@ -144,33 +166,39 @@ function onEachFeature(feature, layer) {
 }
 
 geojson = L.geoJson(statesData, {
+  //console.log(statesData)
+  //System.out.println('statesData')
   style: style, //A Function defining the Path options for styling GeoJSON lines and polygons, called internally when data is added
   onEachFeature: onEachFeature, //A Function that will be called once for each created Feature, after it has been created and styled
 }).addTo(map);
 
-map.attributionControl.addAttribution(
-  'Population data &copy; <a href="http://census.gov/">US Census Bureau</a>'
-);
+// map.attributionControl.addAttribution(
+//   'Population data &copy; <a href="http://census.gov/">US Census Bureau</a>'
+// );
 
 var legend = L.control({ position: "bottomright" });
 
 legend.onAdd = function (map) {
   var div = L.DomUtil.create("div", "info legend"),
-    grades = [0, 10, 20, 50, 100, 200, 500, 1000],
+    grades = range(0, 8, Min, Max), //[0, 0.1, 0.2, 0.5, 0.1, 0.2, 0.5, 0.1],
     labels = [],
     from,
     to;
 
-  for (var i = 0; i < grades.length; i++) {
-    from = grades[i];
-    to = grades[i + 1];
-
+  for (var i = 0; i < grades.length - 1; i++) {
+    to = grades[i];
+    from = grades[i + 1];
+    console.log(`From: ${from.toFixed(3)}, To: ${to.toFixed(3)}`);
     labels.push(
       '<i style="background:' +
-        getColorHealth(from + 1) +
+        scale(from).hex() + //getColorHealth(from + 1) +
         '"></i> ' +
-        from +
-        (to ? "&ndash;" + to : "+")
+        from.toFixed(3) +
+        "--" +
+        to.toFixed(3)
+      //from.toFixed(2)
+      //from +
+      //(to ? "&ndash;" + to : "+")
     );
   }
 
@@ -179,3 +207,20 @@ legend.onAdd = function (map) {
 };
 
 legend.addTo(map);
+
+//Use this to create based on Max and Min
+// Should match the number of quantiles used in the scale command for coloring
+function range(start, end, Min, Max) {
+  var ans = [0];
+  var inc = Max / (end + 1);
+  for (let i = start; i <= end; i++) {
+    ans.push(i * inc + inc);
+    //console.log(i);
+  }
+  //ans.push(0);
+  //console.log(ans);
+  return ans.reverse();
+}
+
+featureScaleArray = range(0, 8, Min, Max);
+//console.log(featureScaleArray);
